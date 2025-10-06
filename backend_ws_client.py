@@ -15,7 +15,7 @@ class BackendClient:
     - Auth: POST {BASE}/api/token/ -> {'access','refresh'}
     - WS :  wss://{HOST}/ws/chat/?token=<access>&source=<client>
     - Send: {"type":"transcription","data":"..."}
-    - Recv: 'user_utt', 'llm_response', 'audio_chunk', etc.
+    - Recv: 'user_utt', 'llm_response', 'emotion', etc.
 
     Thread-safe bridge methods are provided by BackendBridge below.
     """
@@ -35,8 +35,7 @@ class BackendClient:
 
         # For request/response pairing in a single-flight fashion
         self._pending_future: Optional[asyncio.Future] = None
-        self._collect_audio: bool = False
-        self._audio_chunks: List[str] = []  # base64 strings as received
+
         self._lock = asyncio.Lock()
 
     # ---------------------------
@@ -94,21 +93,18 @@ class BackendClient:
                     data = json.loads(msg.data)
                 except json.JSONDecodeError:
                     continue
+               
                 mtype = data.get("type")
                 if mtype == "llm_response":
-                    # Resolve pending future with (text, [audio_chunks])
+                    # Resolve pending future with (text, emotion)
                     async with self._lock:
                         text = data.get("data")
-                        audio = self._audio_chunks[:] if self._collect_audio else []
-                        self._audio_chunks.clear()
-                        self._collect_audio = False
+                        emotion = data.get("emotion")
+                        
                         if self._pending_future and not self._pending_future.done():
-                            self._pending_future.set_result((text, audio))
-                elif mtype == "audio_chunk":
-                    async with self._lock:
-                        if self._collect_audio:
-                            self._audio_chunks.append(data.get("data", ""))
-                # You can add more handlers here as needed.
+                            self._pending_future.set_result((text, emotion))
+
+
             elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE):
                 # Try to reconnect with backoff
                 await self._reconnect_with_backoff()
@@ -129,17 +125,17 @@ class BackendClient:
     # ---------------------------
     # Public API (async)
     # ---------------------------
-    async def send_transcription_and_wait(self, text: str, collect_audio: bool = False, timeout: float = 20.0) -> Tuple[str, List[str]]:
+    async def send_transcription_and_wait(self, text: str, timeout: float = 20.0) -> Tuple[str, str]:
         """Send a transcription and wait for the next llm_response.
-        Returns: (llm_text, audio_chunks_base64[])
+        Returns: (llm_text, emotion)
         """
         if not text.strip():
-            return "", []
+            return "", [], None
+            
         async with self._lock:
-            # Prepare a new future and (optionally) audio collection
+            # Prepare a new future
             self._pending_future = asyncio.get_running_loop().create_future()
-            self._collect_audio = bool(collect_audio)
-            self._audio_chunks.clear()
+
         payload = {"type": "transcription", "data": text}
         assert self._ws
         await self._ws.send_str(json.dumps(payload))
@@ -148,8 +144,6 @@ class BackendClient:
         finally:
             async with self._lock:
                 self._pending_future = None
-                self._collect_audio = False
-                self._audio_chunks.clear()
 
 
 class BackendBridge:
@@ -185,11 +179,11 @@ class BackendBridge:
             pass
         self._loop.call_soon_threadsafe(self._loop.stop)
 
-    def send_text_blocking(self, text: str, collect_audio: bool = False, timeout: float = 20.0) -> Tuple[str, List[str]]:
+    def send_text_blocking(self, text: str, timeout: float = 20.0) -> Tuple[str, str]:
         if not self._started.is_set():
             raise RuntimeError("BackendBridge not started. Call start() first.")
         fut = asyncio.run_coroutine_threadsafe(
-            self._client.send_transcription_and_wait(text, collect_audio, timeout),
+            self._client.send_transcription_and_wait(text, timeout),
             self._loop,
         )
         return fut.result()

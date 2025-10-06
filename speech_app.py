@@ -22,7 +22,7 @@ try:
         sys.path.append(module_dir)
 
     from src.speakout import initialize_ros_node, say_text_with_service, configure_speech_speed
-    from src.vader_emotion import classify_emotion, zero_shot_classifier # new for emotion and gesture
+    # from src.vader_emotion import classify_emotion, zero_shot_classifier # new for emotion and gesture
     from src.backend_ws_client import BackendBridge
 
 except ImportError as e:
@@ -83,7 +83,7 @@ class QTrobotGoogleSpeech():
         self.model = rospy.get_param("/dss_backend_connected/model", 'default')
         self.use_enhanced_model = rospy.get_param("/dss_backend_connected/use_enhanced_model", True)
    
-        self.emotion_classifier_pipeline = pipeline("zero-shot-classification", model="sileod/deberta-v3-base-tasksource-nli")
+        #self.emotion_classifier_pipeline = pipeline("zero-shot-classification", model="sileod/deberta-v3-base-tasksource-nli")
         
         print(f"audio rate:{self.audio_rate}, default language:{self.language}, model:{self.model}, use_enhanced_model:{self.use_enhanced_model}")
 
@@ -123,12 +123,13 @@ class QTrobotGoogleSpeech():
                 # --- Timing Point: Start LLM call ---
                 llm_start_time = time.time()
                 
-                reply, _chunks = self.backend.send_text_blocking(transcript, collect_audio=False, timeout=25.0)
+                #backend returns both resposne and the emotion
+                reply, emotion = self.backend.send_text_blocking(transcript, timeout=25.0)
                 
                 # --- Timing Point: End LLM call ---
                 llm_end_time = time.time()
                 #emotion = classify_emotion(reply) # new for emotion and gesture
-                emotion = zero_shot_classifier(self.emotion_classifier_pipeline, reply)
+                #emotion = zero_shot_classifier(self.emotion_classifier_pipeline, reply)
                 print(f"🤖 Cognibot: {reply}")
                 print(f"Emotion: {emotion}")
                     
