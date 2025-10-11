@@ -144,7 +144,7 @@ class BackendClient:
             # It is similar to Promise in Javascript
             self._pending_future = asyncio.get_running_loop().create_future()
 
-        payload = {"type": "transcription", "data": text}
+        payload = {"type": "transcription_with_emotion", "data": text}
         assert self._ws
         await self._ws.send_str(json.dumps(payload))
         try:
