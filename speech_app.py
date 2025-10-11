@@ -4,11 +4,8 @@ import queue
 import time
 import rospy
 import sys
-from std_msgs.msg import Bool # Add this import at the top of your file
 
 from google.cloud import speech
-from google.api_core import exceptions as gexcp
-from transformers import pipeline # new added for zero_shot emotion classifier
 
 from qt_gesture_controller.srv import * # for gesture
 from qt_robot_interface.srv import emotion_show, emotion_showRequest # for emotion
@@ -30,7 +27,6 @@ except ImportError as e:
 
 
     
-from std_msgs.msg import String
 from audio_common_msgs.msg import AudioData
 from qt_gspeech_app.srv import *
 
@@ -83,7 +79,6 @@ class QTrobotGoogleSpeech():
         self.model = rospy.get_param("/dss_backend_connected/model", 'default')
         self.use_enhanced_model = rospy.get_param("/dss_backend_connected/use_enhanced_model", True)
    
-        #self.emotion_classifier_pipeline = pipeline("zero-shot-classification", model="sileod/deberta-v3-base-tasksource-nli")
         
         print(f"audio rate:{self.audio_rate}, default language:{self.language}, model:{self.model}, use_enhanced_model:{self.use_enhanced_model}")
 
@@ -124,12 +119,11 @@ class QTrobotGoogleSpeech():
                 llm_start_time = time.time()
                 
                 #backend returns both resposne and the emotion
-                reply, emotion = self.backend.send_text_blocking(transcript, timeout=25.0)
+                reply, emotion = self.backend.send_transcript_and_wait(transcript, timeout=25.0)
                 
                 # --- Timing Point: End LLM call ---
                 llm_end_time = time.time()
                 #emotion = classify_emotion(reply) # new for emotion and gesture
-                #emotion = zero_shot_classifier(self.emotion_classifier_pipeline, reply)
                 print(f"🤖 Cognibot: {reply}")
                 print(f"Emotion: {emotion}")
                     
