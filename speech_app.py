@@ -18,7 +18,7 @@ try:
     if module_dir not in sys.path:
         sys.path.append(module_dir)
 
-    from src.speakout import initialize_ros_node, say_text_with_service, configure_speech_speed
+    from src.speakout import initialize_ros_node, say_text_with_service, configure_speech_speed, _play_gesture_async
     # from src.vader_emotion import classify_emotion, zero_shot_classifier # new for emotion and gesture
     from src.backend_ws_client import BackendBridge
 
@@ -113,11 +113,11 @@ class QTrobotGoogleSpeech():
         # Manually clear the queue before recognizing
         self.aqueue.queue.clear()
         transcript = self.recognize_gspeech(timeout, options, language, True)
-        get_emotion = False
+        get_emotion = True
         if transcript:
             try:
                 # --- Timing Point: Start LLM call ---
-                llm_start_time = time.time()
+                llm_start_time = time.perf_counter()
                 
                 #backend returns both resposne and the emotion
                 if get_emotion:
@@ -126,14 +126,19 @@ class QTrobotGoogleSpeech():
                     reply = self.backend.send_transcript_and_wait(transcript, timeout=25.0)
                 
                 # --- Timing Point: End LLM call ---
-                llm_end_time = time.time()
+                llm_end_time = time.perf_counter()
                 #emotion = classify_emotion(reply) # new for emotion and gesture
                 print(f"🤖 Cognibot: {reply}")
-                print(f"Emotion: {emotion}")
+                if get_emotion:
+                    print(f"Emotion: {emotion}")
+                print(f"Response Time: {llm_end_time-llm_start_time:.3f}s")
                     
                 # --- Timing Point: Start ROS TTS call ---
                 tts_start_time = time.time()
-                say_text_with_service(reply, emotion.lower())
+                if get_emotion:
+                    say_text_with_service(reply, emotion.lower())
+                else: 
+                    say_text_with_service(reply, "neutral")
                 # --- Timing Point: End ROS TTS call (Robot finished speaking) ---
                 tts_end_time = time.time()
 
@@ -245,21 +250,6 @@ class QTrobotGoogleSpeech():
             else:
                  return transcript
         return transcript
- 
-def _play_gesture_async(name: str):
-        if gesture_play_service is None:
-            rospy.logerr("Gestire service is not initialized.")
-            return
-        try:
-            ges_resp = gesture_play_service(name, 0)
-            
-            if ges_resp.status:
-                rospy.loginfo(f"Gesture service call was successful.{name}")
-                gesture_play_service("QT/neutral", 0) # reset QT afterwards
-            else:
-                rospy.logwarn("Gesture service call failed.")
-        except Exception as e:
-            rospy.logwarn(f"Gesture Play Failed: {e}")
     
 if __name__ == "__main__":
     initialize_ros_node()

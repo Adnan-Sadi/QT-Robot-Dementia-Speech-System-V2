@@ -59,6 +59,36 @@ def gesture_for_mood(mood: str) -> str:
     
     return mapping.get(mood, 'QT/neutral')
 
+# New for gesture generation    
+def _play_gesture_async(name: str):
+    if gesture_play_service is None:
+        rospy.logerr("Gestire service is not initialized.")
+        return
+    try:
+        ges_resp = gesture_play_service(name, 0)
+        
+        if ges_resp.status:
+            rospy.loginfo(f"Gesture service call was successful.{name}")
+            gesture_play_service("QT/neutral", 0) # reset QT afterwards
+        else:
+            rospy.logwarn("Gesture service call failed.")
+    except Exception as e:
+        rospy.logwarn(f"Gesture Play Failed: {e}")
+
+# New for gesture generation    
+def _play_emotion_async(name: str):
+    if emotion_show_service is None:
+        rospy.logerr("Emotion service is not initialized.")
+        return
+    try:
+        emo_resp = emotion_show_service(name)
+        
+        if  emo_resp.status:
+            rospy.loginfo(f"Emotion service call was successful.{name}")
+        else:
+            rospy.logwarn("Emotion service call failed.")
+    except Exception as e:
+        rospy.logwarn(f"Emotion Show Failed: {e}")
 
 def say_text_with_service(text: str, emotion: str):
     """
@@ -71,33 +101,19 @@ def say_text_with_service(text: str, emotion: str):
     if behavior_talkText_service is None:
         rospy.logerr("Speech service is not initialized. Call initialize_ros_node() first.")
         return
-    # New for gesture generation    
-    def _play_gesture_async(name: str):
-        if gesture_play_service is None:
-            rospy.logerr("Gestire service is not initialized.")
-            return
-        try:
-            ges_resp = gesture_play_service(name, 0)
-            
-            if ges_resp.status:
-                rospy.loginfo(f"Gesture service call was successful.{name}")
-                gesture_play_service("QT/neutral", 0) # reset QT afterwards
-            else:
-                rospy.logwarn("Gesture service call failed.")
-        except Exception as e:
-            rospy.logwarn(f"Gesture Play Failed: {e}")
     #req = speech_sayRequest()
     #req.message = text
     req = srv.behavior_talk_textRequest() # Changed from speech_sayRequest
     req.message = text
     
-    emo_req = srv.emotion_showRequest()
-    emo_req.name = f"QT/{emotion}" # New for emotion
-    
     gesture_name = gesture_for_mood(emotion)
+    emotion_name = f"QT/{emotion}"
     
     if gesture_name:
         threading.Thread(target=_play_gesture_async, args=(gesture_name,), daemon=True).start()
+        
+    if emotion_name:
+        threading.Thread(target=_play_emotion_async, args=(emotion_name,), daemon=True).start()
 
     try:
         rospy.loginfo(f"Calling speech service with message: '{text}'")
