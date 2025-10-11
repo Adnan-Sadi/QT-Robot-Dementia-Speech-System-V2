@@ -118,14 +118,6 @@ def say_text_with_service(text: str, emotion: str):
     try:
         rospy.loginfo(f"Calling speech service with message: '{text}'")
         #resp = speech_say_service(req)
-        
-        # New for emotion    
-        #emo_resp = emotion_show_service(emo_req)
-        
-        #if emo_resp.status:
-            #rospy.loginfo("Emotion service call was successful.")
-        #else:
-            #rospy.logwarn("Emotion service call failed.")
 
 
         resp = behavior_talkText_service(req)
