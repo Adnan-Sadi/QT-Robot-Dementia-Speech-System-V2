@@ -113,13 +113,17 @@ class QTrobotGoogleSpeech():
         # Manually clear the queue before recognizing
         self.aqueue.queue.clear()
         transcript = self.recognize_gspeech(timeout, options, language, True)
+        get_emotion = False
         if transcript:
             try:
                 # --- Timing Point: Start LLM call ---
                 llm_start_time = time.time()
                 
                 #backend returns both resposne and the emotion
-                reply, emotion = self.backend.send_transcript_and_wait(transcript, timeout=25.0)
+                if get_emotion:
+                    reply, emotion = self.backend.send_transcript_and_wait(transcript, timeout=25.0, get_emotion=get_emotion)
+                else:
+                    reply = self.backend.send_transcript_and_wait(transcript, timeout=25.0)
                 
                 # --- Timing Point: End LLM call ---
                 llm_end_time = time.time()

@@ -104,12 +104,16 @@ class BackendClient:
                     # Resolve pending future with (text, emotion)
                     async with self._lock:
                         text = data.get("data")
-                        emotion = data.get("emotion")
+                        if data.get("emotion") is not None:
+                            emotion = data.get("emotion")
                         
-                        if self._pending_future and not self._pending_future.done():
-                            # resolves the pending future with the received response
-                            # This unblocks the await that was waiting for it.
-                            self._pending_future.set_result((text, emotion))
+                            if self._pending_future and not self._pending_future.done():
+                                # resolves the pending future with the received response
+                                # This unblocks the await that was waiting for it.
+                                self._pending_future.set_result((text, emotion))
+                        else:
+                            if self._pending_future and not self._pending_future.done():
+                                self._pending_future.set_result((text))
 
 
             elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE):
@@ -132,7 +136,7 @@ class BackendClient:
     # ---------------------------
     # Public API (async)
     # ---------------------------
-    async def send_transcription_and_wait(self, text: str, timeout: float = 20.0) -> Tuple[str, str]:
+    async def send_transcription_and_wait(self, text: str, timeout: float = 20.0, get_emotion: bool = False) -> Tuple[str, Optional[str]]:
         """Send a transcription and wait for the next llm_response.
         Returns: (llm_text, emotion)
         """
@@ -143,8 +147,12 @@ class BackendClient:
             # It represents a single result that will be available in the future - either a value or an exception.
             # It is similar to Promise in Javascript
             self._pending_future = asyncio.get_running_loop().create_future()
+        
+        if get_emotion:
+            payload = {"type": "transcription_with_emotion", "data": text}
+        else:
+            payload = {"type": "transcription", "data": text}
 
-        payload = {"type": "transcription_with_emotion", "data": text}
         assert self._ws
         await self._ws.send_str(json.dumps(payload))
         try:
@@ -189,11 +197,11 @@ class BackendBridge:
             pass
         self._loop.call_soon_threadsafe(self._loop.stop)
 
-    def send_transcript_and_wait(self, text: str, timeout: float = 20.0) -> Tuple[str, str]:
+    def send_transcript_and_wait(self, text: str, timeout: float = 20.0, get_emotion: bool = False) -> Tuple[str, Optional[str]]:
         if not self._started.is_set():
             raise RuntimeError("BackendBridge not started. Call start() first.")
         fut = asyncio.run_coroutine_threadsafe(
-            self._client.send_transcription_and_wait(text, timeout),
+            self._client.send_transcription_and_wait(text, timeout, get_emotion),
             self._loop,
         )
         return fut.result()
