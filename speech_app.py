@@ -132,7 +132,7 @@ class QTrobotGoogleSpeech():
                 # --- Timing Point: End LLM call ---
                 llm_end_time = time.perf_counter()
                 #emotion = classify_emotion(reply) # new for emotion and gesture
-                print(f"🤖 Cognibot: {reply}")
+                print(f"Cognibot: {reply}")
                 if get_emotion:
                     print(f"Emotion: {emotion}")
                 print(f"Response Time: {llm_end_time-llm_start_time:.3f}s")

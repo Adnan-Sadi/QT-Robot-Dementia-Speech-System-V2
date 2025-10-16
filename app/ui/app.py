@@ -38,6 +38,7 @@ class MainWindow(ctk.CTk):
         side_title.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 4))
 
         self.activities = ActivityGrid(side, settings.activity_images_dir, on_select=self._on_activity)
+        print( "Loading activity images from:", settings.activity_images_dir)
         self.activities.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)
 
         # Footer: status bar
