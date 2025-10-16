@@ -1,5 +1,6 @@
 import subprocess
 import threading
+import os
 from typing import Optional, Callable
 from app.config.settings import settings
 
@@ -21,13 +22,18 @@ class ROSControl:
                 on_started("speech_app.py is already running.")
             return
 
+        # ensure child python process is unbuffered so output arrives live
+        env = os.environ.copy()
+        env["PYTHONUNBUFFERED"] = "1"
+
         # Start the speech app in a background process and capture stdout/stderr
         self._speech_proc = subprocess.Popen(
             [settings.python_executable, settings.speech_app],
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
-            bufsize=1
+            bufsize=1,
+            env=env
         )
 
         # Start a thread to read stdout lines and forward them to on_log
@@ -36,6 +42,9 @@ class ROSControl:
                 if proc.stdout:
                     for raw_line in proc.stdout:
                         line = raw_line.rstrip("\n")
+                        # Always print to terminal for developer visibility
+                        print(line, flush=True)
+                        # Forward to GUI callback (if provided) for parsing/storing
                         if callback:
                             try:
                                 callback(line)
@@ -48,7 +57,7 @@ class ROSControl:
         self._stdout_thread = threading.Thread(target=_reader, args=(self._speech_proc, on_log), daemon=True)
         self._stdout_thread.start()
 
-        if on_started: 
+        if on_started:
             on_started("Launched speech_app.py")
 
 

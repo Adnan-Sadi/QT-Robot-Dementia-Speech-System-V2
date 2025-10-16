@@ -13,11 +13,11 @@ class ChatController:
     def start_chat(self):
         self.bus.publish("status", "Starting chat…")
 
-        # on_started -> log (one-off)
+        # on_started -> print to terminal (do not publish as UI log)
         def on_started(msg: str):
-            self.bus.publish("log", msg)
+            print(msg, flush=True)
 
-        # on_log receives raw lines from speech_app stdout; parse and publish proper events
+        # on_log receives raw lines from speech_app stdout; parse and publish only STT/LLM events
         def on_log(raw_line: str):
             if not raw_line:
                 return
@@ -29,8 +29,6 @@ class ChatController:
                 text = line.split("Transcript:", 1)[1].strip()
                 if text:
                     self.bus.publish("stt", text)
-                else:
-                    self.bus.publish("log", line)
                 return
             
             # Recognized printed final detection
@@ -51,12 +49,11 @@ class ChatController:
                 reply = line.split("Cognibot:", 1)[1].strip()
                 if reply:
                     self.bus.publish("llm", reply)
-                else:
-                    self.bus.publish("log", line)
                 return
 
-            # Everything else -> log
-            self.bus.publish("log", line)
+            # Everything else -> do not publish to UI (already printed by ROSControl)
+            # (keeps UI clean for only STT/LLM)
+            return
 
         # Start speech app and stream logs
         self.ros.start_speech_app(on_started=on_started, on_log=on_log)
@@ -64,11 +61,3 @@ class ChatController:
     def stop_chat(self):
         self.bus.publish("status", "Stopping chat…")
         self.ros.stop_speech_app(on_log=lambda m: self.bus.publish("log", m))
-
-    # # Hooks for incoming STT/LLM events 
-    # # need to wire these up to the pipeline later
-    # def on_stt_text(self, text: str):
-    #     self.bus.publish("stt", text)
-
-    # def on_llm_text(self, text: str):
-    #     self.bus.publish("llm", text)
