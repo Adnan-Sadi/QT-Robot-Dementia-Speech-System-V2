@@ -19,6 +19,7 @@ class BackendClient:
         self.base_http = base_http.rstrip("/")
         self.ws_path = ws_path if ws_path.startswith("/") else "/" + ws_path
         self.source = source
+        self.chat_topic = None#"moon-landing"
 
         self._http: Optional[aiohttp.ClientSession] = None
         self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
@@ -76,7 +77,12 @@ class BackendClient:
             raise RuntimeError(f"Missing 'access' in token response: {data}")
         # prepare the websocket url
         scheme = "wss" if self.base_http.startswith("https") else "ws"
-        qs = urlencode({"token": self.access, "source": self.source})
+        
+        params = {"token": self.access, "source": self.source}
+        if self.chat_topic:                       # ← add topic if provided
+            params["chat_topic"] = self.chat_topic
+            
+        qs = urlencode(params)
         self.ws_url = f"{scheme}://{self.base_http.split('://',1)[1]}{self.ws_path}?{qs}"
 
     async def _connect_ws(self):

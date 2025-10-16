@@ -8,7 +8,7 @@ class TranscriptPanel(ctk.CTkFrame):
         self.rowconfigure(1, weight=1)
 
 
-        self.title = ctk.CTkLabel(self, text="Transcripts", font=("", 16, "bold"))
+        self.title = ctk.CTkLabel(self, text="Chat History", font=("", 16, "bold"))
         self.title.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 4))
 
 

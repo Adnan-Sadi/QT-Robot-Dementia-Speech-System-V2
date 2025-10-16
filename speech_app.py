@@ -92,6 +92,12 @@ class QTrobotGoogleSpeech():
         # Service client for calling /qt_robot/speech/recognize
         rospy.wait_for_service('/qt_robot/speech/recognize')
         self.speech_recognize_client = rospy.ServiceProxy('/qt_robot/speech/recognize', speech_recognize)
+        
+        # Service for emotion (for thinking face)
+        self.emotion_show_service = rospy.ServiceProxy('/qt_robot/emotion/show', srv.emotion_show)
+        rospy.wait_for_service('/qt_robot/emotion/stop')
+        self.emotion_stop_client = rospy.ServiceProxy('/qt_robot/emotion/stop', srv.emotion_stop)
+        
 
 
     def callback_audio_stream(self, msg): 
@@ -117,9 +123,18 @@ class QTrobotGoogleSpeech():
         # Manually clear the queue before recognizing
         self.aqueue.queue.clear()
         transcript = self.recognize_gspeech(timeout, options, language, True)
+        
+        # Set-up variables for the "thinking" emotion
+        EMOTION_THINKING = "QT/confused" # Example emotion name for 'thinking'
+        emotion_stop_service = self.emotion_stop_client
+        emo_req = srv.emotion_showRequest()
+        
         get_emotion = True
         if transcript:
             try:
+                #emo_req.name = EMOTION_THINKING
+                #self.emotion_show_service(emo_req)
+                
                 # --- Timing Point: Start LLM call ---
                 llm_start_time = time.perf_counter()
                 
@@ -140,6 +155,7 @@ class QTrobotGoogleSpeech():
                 # --- Timing Point: Start ROS TTS call ---
                 tts_start_time = time.time()
                 if get_emotion:
+                    #emotion_stop_service()
                     say_text_with_service(reply, emotion.lower())
                 else: 
                     say_text_with_service(reply, "neutral")
@@ -228,7 +244,6 @@ class QTrobotGoogleSpeech():
                 output = ""
                 print("exception")     
 
-        print("Detected [%s]" % (output))
         return output
 
 
@@ -254,13 +269,10 @@ class QTrobotGoogleSpeech():
             else:
                  return transcript
         return transcript
-    
-if __name__ == "__main__":
-    initialize_ros_node()
-    configure_speech_speed(110)
-    
-    gspeech = QTrobotGoogleSpeech() 
-    
+        
+     
+
+def do_startup_movement():
     # ... (gesture and emotion setup, same as before) ...
     rospy.wait_for_service('/qt_robot/gesture/play')
     gesture_play_service = rospy.ServiceProxy('/qt_robot/gesture/play', gesture_play) 
@@ -271,7 +283,17 @@ if __name__ == "__main__":
     emo_req = srv.emotion_showRequest()
     emo_req.name = f"QT/yawn"
     emotion_show_service(emo_req)
-
+    
+        
+    
+if __name__ == "__main__":
+    initialize_ros_node()
+    configure_speech_speed(110)
+    
+    gspeech = QTrobotGoogleSpeech()
+    
+    do_startup_movement() 
+    
     # Start the recognize service call in a new thread 
     
     def start_recognition_loop():

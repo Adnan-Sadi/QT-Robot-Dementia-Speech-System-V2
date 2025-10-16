@@ -11,7 +11,7 @@ class ChatController:
     # Publishes a “Starting chat…” status event.
     # Publishes a “Starting chat…” status event.
     def start_chat(self):
-        self.bus.publish("status", "Starting chat…")
+        self.bus.publish("status", "Chat Started")
 
         # on_started -> print to terminal (do not publish as UI log)
         def on_started(msg: str):
@@ -30,19 +30,7 @@ class ChatController:
                 if text:
                     self.bus.publish("stt", text)
                 return
-            
-            # Recognized printed final detection
-            # "Detected [<text>]"
-            if line.startswith("Detected ["):
-                # attempt to extract inside brackets
-                try:
-                    content = line.split("Detected [", 1)[1].rstrip("]")
-                    if content:
-                        self.bus.publish("stt", content)
-                        return
-                except Exception:
-                    pass
-
+           
             # LLM reply lines
             # "Cognibot: <reply>"
             if line.startswith("Cognibot:"):
@@ -59,5 +47,5 @@ class ChatController:
         self.ros.start_speech_app(on_started=on_started, on_log=on_log)
 
     def stop_chat(self):
-        self.bus.publish("status", "Stopping chat…")
+        self.bus.publish("status", "Chat Stopped")
         self.ros.stop_speech_app(on_log=lambda m: self.bus.publish("log", m))
