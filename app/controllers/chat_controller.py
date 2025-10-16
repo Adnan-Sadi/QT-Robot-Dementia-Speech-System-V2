@@ -12,7 +12,6 @@ class ChatController:
     def start_chat(self):
         self.bus.publish("status", "Starting chat…")
         self.ros.start_speech_app(on_started=lambda m: self.bus.publish("log", m))
-        self.ros.trigger_recognize(on_log=lambda m: self.bus.publish("log", m))
 
     def stop_chat(self):
         self.bus.publish("status", "Stopping chat…")

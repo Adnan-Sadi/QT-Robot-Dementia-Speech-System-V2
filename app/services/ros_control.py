@@ -20,24 +20,6 @@ class ROSControl:
             on_started("Launched speech_app.py")
 
 
-    def trigger_recognize(self, on_log: Optional[Callable[[str], None]] = None):
-    # Call: rosservice call /qt_robot/speech/recognize "{}"
-        def _run():
-            try:
-                cmd = [
-                "rosservice", "call", settings.ros_recognize_service, "{}"
-                ]
-                if on_log: 
-                    on_log("Calling: " + " ".join(cmd))
-                subprocess.run(cmd, check=True)
-                if on_log: 
-                    on_log("Recognize triggered.")
-            except subprocess.CalledProcessError as e:
-                if on_log: on_log(f"Recognize failed: {e}")
-            
-            threading.Thread(target=_run, daemon=True).start()
-
-
     def stop_speech_app(self, on_log: Optional[Callable[[str], None]] = None):
         if self._speech_proc and self._speech_proc.poll() is None:
             self._speech_proc.terminate()

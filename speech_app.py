@@ -83,11 +83,15 @@ class QTrobotGoogleSpeech():
         print(f"audio rate:{self.audio_rate}, default language:{self.language}, model:{self.model}, use_enhanced_model:{self.use_enhanced_model}")
 
         # start recognize service
-        self.speech_recognize = rospy.Service('/qt_robot/speech/recognize', speech_recognize, self.callback_recognize)        
+        self.speech_recognize_service = rospy.Service('/qt_robot/speech/recognize', speech_recognize, self.callback_recognize) # RENAMED LOCAL VAR
         rospy.Subscriber('/qt_respeaker_app/channel0', AudioData, self.callback_audio_stream)
         
         self.backend = BackendBridge()
         self.backend.start()
+
+        # Service client for calling /qt_robot/speech/recognize
+        rospy.wait_for_service('/qt_robot/speech/recognize')
+        self.speech_recognize_client = rospy.ServiceProxy('/qt_robot/speech/recognize', speech_recognize)
 
 
     def callback_audio_stream(self, msg): 
@@ -253,21 +257,46 @@ class QTrobotGoogleSpeech():
     
 if __name__ == "__main__":
     initialize_ros_node()
-    #rospy.init_node('qt_gspeech_app')  
     configure_speech_speed(110)
     
     gspeech = QTrobotGoogleSpeech() 
+    
+    # ... (gesture and emotion setup, same as before) ...
     rospy.wait_for_service('/qt_robot/gesture/play')
     gesture_play_service = rospy.ServiceProxy('/qt_robot/gesture/play', gesture_play) 
     threading.Thread(target=_play_gesture_async, args=("QT/happy",), daemon=True).start()
     
-    rospy.wait_for_service('/qt_robot/emotion/show') # New for emotion
-    emotion_show_service = rospy.ServiceProxy('/qt_robot/emotion/show', srv.emotion_show) # New for emotion
+    rospy.wait_for_service('/qt_robot/emotion/show') 
+    emotion_show_service = rospy.ServiceProxy('/qt_robot/emotion/show', srv.emotion_show)
     emo_req = srv.emotion_showRequest()
-    emo_req.name = f"QT/yawn" # New for emotion
+    emo_req.name = f"QT/yawn"
     emotion_show_service(emo_req)
+
+    # Start the recognize service call in a new thread 
+    
+    def start_recognition_loop():
+        """Function to be run in a separate thread to start the blocking service call."""
+        rospy.loginfo("Starting QT Speech Recognition loop in a background thread...")
+        req = speech_recognizeRequest() 
+        try:
+            # This call will block until ROS is shut down or an error occurs.
+            gspeech.speech_recognize_client(req)
+        except rospy.ServiceException as e:
+            # Expect a ServiceException upon Ctrl+C/ROS shutdown.
+            rospy.loginfo(f"Speech recognition service client terminated: {e}")
+        except Exception as e:
+            rospy.logerr(f"Unexpected error in recognition thread: {e}")
+
+    # Start the thread with daemon=True so it doesn't prevent the main app from exiting
+    # once the main thread (rospy.spin()) is terminated.
+    threading.Thread(target=start_recognition_loop, daemon=True).start()
+    
+    # ------------------------------------------------------------------
              
-    rospy.loginfo("QT Speech App is Ready!")
+    rospy.loginfo("QT Speech App is Ready! Press Ctrl+C to shut down.")
     rospy.on_shutdown(lambda: gspeech.backend.stop())
-    rospy.spin()
+    
+    # The main thread now runs rospy.spin(), which can handle the Ctrl+C signal.
+    rospy.spin() 
+    
     rospy.loginfo("QT Speech App Shutdown")
