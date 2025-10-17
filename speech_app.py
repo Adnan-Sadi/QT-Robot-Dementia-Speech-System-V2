@@ -125,9 +125,9 @@ class QTrobotGoogleSpeech():
         transcript = self.recognize_gspeech(timeout, options, language, True)
         
         # Set-up variables for the "thinking" emotion
-        EMOTION_THINKING = "QT/confused" # Example emotion name for 'thinking'
-        emotion_stop_service = self.emotion_stop_client
-        emo_req = srv.emotion_showRequest()
+        #EMOTION_THINKING = "QT/confused"
+        #emotion_stop_service = self.emotion_stop_client
+        #emo_req = srv.emotion_showRequest()
         
         get_emotion = True
         if transcript:
@@ -152,15 +152,11 @@ class QTrobotGoogleSpeech():
                     print(f"Emotion: {emotion}")
                 print(f"Response Time: {llm_end_time-llm_start_time:.3f}s")
                     
-                # --- Timing Point: Start ROS TTS call ---
-                tts_start_time = time.time()
                 if get_emotion:
                     #emotion_stop_service()
                     say_text_with_service(reply, emotion.lower())
                 else: 
                     say_text_with_service(reply, "neutral")
-                # --- Timing Point: End ROS TTS call (Robot finished speaking) ---
-                tts_end_time = time.time()
 
 
                 print("----------------------")
@@ -222,11 +218,13 @@ class QTrobotGoogleSpeech():
                 language_code= str(language.strip()),
                 enable_automatic_punctuation=True,
             )
+
         streaming_config = speech.StreamingRecognitionConfig(
             config=config,
-            interim_results=False,
+            interim_results=True,
             enable_voice_activity_events=True, 
             )
+
         with MicrophoneStream(self.aqueue) as mic:
             start_time = time.time()
             audio_generator = mic.generator()
@@ -252,22 +250,45 @@ class QTrobotGoogleSpeech():
     """
     def validate_response(self, responses, context, start_time, timeout):
         transcript = ""
+        listening_emotion_played = False
+        EMOTION_LISTENING = "QT/showing_smile" # Example: A simple blink or nod to show attention
+        
+        # Get the emotion service proxy (assuming it's available or set up here/globally)
+        emotion_show_service = rospy.ServiceProxy('/qt_robot/emotion/show', srv.emotion_show)
+        emo_req = srv.emotion_showRequest()
+
         for response in responses:
-            print(response)
+            # Check for the end of the stream or empty results
             if not response.results:
                 continue
+                
             result = response.results[0]
             if not result.alternatives:
                 continue
+                
             transcript = result.alternatives[0].transcript
-            print(f"Transcript: {transcript}")
-            if not result.is_final:
-                if context:
-                    for option in context:
-                        if option == transcript.lower().strip():
-                            return transcript
-            else:
+            
+            # --- NEW: Immediate Feedback Emotion Logic ---
+            if not result.is_final and not listening_emotion_played and transcript.strip():
+                # First time we see a non-empty, non-final transcript, play the listening emotion
+                emo_req.name = EMOTION_LISTENING
+                emotion_show_service(emo_req)
+                print(f"Robot started listening emotion: {EMOTION_LISTENING}")
+                listening_emotion_played = True
+                
+            # If we get a FINAL result, break and return it
+            if result.is_final:
+                 print(f"Transcript: {transcript}")
                  return transcript
+                 
+            # If context is provided (for command/option matching), check against interim results
+            if context:
+                for option in context:
+                    if option == transcript.lower().strip():
+                        print(f"Transcript: {transcript}")
+                        return transcript
+                        
+        print(f"Transcript: {transcript}")
         return transcript
         
      
