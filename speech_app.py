@@ -11,6 +11,7 @@ from qt_gesture_controller.srv import * # for gesture
 from qt_robot_interface.srv import emotion_show, emotion_showRequest # for emotion
 from qt_robot_interface import srv
 import threading #new
+import random
 
 try:
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -251,7 +252,8 @@ class QTrobotGoogleSpeech():
     def validate_response(self, responses, context, start_time, timeout):
         transcript = ""
         listening_emotion_played = False
-        EMOTION_LISTENING = "QT/showing_smile" # Example: A simple blink or nod to show attention
+        listening_emotion_list = ["QT/confused", "QT/showing_smile"]
+        EMOTION_LISTENING = random.choices(listening_emotion_list)[0] # Example: A simple blink or nod to show attention
         
         # Get the emotion service proxy (assuming it's available or set up here/globally)
         emotion_show_service = rospy.ServiceProxy('/qt_robot/emotion/show', srv.emotion_show)
@@ -309,7 +311,7 @@ def do_startup_movement():
     
 if __name__ == "__main__":
     initialize_ros_node()
-    configure_speech_speed(110)
+    configure_speech_speed(90)
     
     gspeech = QTrobotGoogleSpeech()
     

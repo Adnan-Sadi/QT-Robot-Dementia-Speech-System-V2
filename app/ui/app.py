@@ -30,16 +30,16 @@ class MainWindow(ctk.CTk):
         self.transcripts.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)
 
         # Right: activities
-        side = ctk.CTkFrame(self)
-        side.grid(row=1, column=1, sticky="nsew", padx=8, pady=8)
-        side.grid_rowconfigure(1, weight=1)
+        #side = ctk.CTkFrame(self)
+        #side.grid(row=1, column=1, sticky="nsew", padx=8, pady=8)
+        #side.grid_rowconfigure(1, weight=1)
 
-        side_title = ctk.CTkLabel(side, text="Activities", font=("", 16, "bold"))
-        side_title.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 4))
+        #side_title = ctk.CTkLabel(side, text="Activities", font=("", 16, "bold"))
+        #side_title.grid(row=0, column=0, sticky="w", padx=8, pady=(8, 4))
 
-        self.activities = ActivityGrid(side, settings.activity_images_dir, on_select=self._on_activity)
-        print( "Loading activity images from:", settings.activity_images_dir)
-        self.activities.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)
+        #self.activities = ActivityGrid(side, settings.activity_images_dir, on_select=self._on_activity)
+        #print( "Loading activity images from:", settings.activity_images_dir)
+        #self.activities.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)
 
         # Footer: status bar
         self.status = StatusBar(self)
@@ -58,9 +58,9 @@ class MainWindow(ctk.CTk):
             if ev.kind == "log":
                 self.transcripts.append("LOG", ev.text)
             elif ev.kind == "stt":
-                self.transcripts.append("STT", ev.text)
+                self.transcripts.append("User", ev.text)
             elif ev.kind == "llm":
-                self.transcripts.append("LLM", ev.text)
+                self.transcripts.append("Cognibot", ev.text)
             elif ev.kind == "status":
                 self.status.set(ev.text)
         self.after(60, self._poll_bus) # poll ~16 fps

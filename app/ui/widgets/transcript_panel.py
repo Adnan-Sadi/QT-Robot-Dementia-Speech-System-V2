@@ -13,7 +13,7 @@ class TranscriptPanel(ctk.CTkFrame):
 
 
         self.textbox = ctk.CTkTextbox(self, width=600, height=320)
-        self.textbox.grid(row=1, column=0, sticky="nsew", padx=8, pady=8)
+        self.textbox.grid(row=1, column=0, sticky="nsew", padx=8, pady=16)
         self.textbox.configure(state="disabled")
 
 

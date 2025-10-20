@@ -19,7 +19,7 @@ class BackendClient:
         self.base_http = base_http.rstrip("/")
         self.ws_path = ws_path if ws_path.startswith("/") else "/" + ws_path
         self.source = source
-        self.chat_topic = None#"moon-landing"
+        self.chat_topic =  "education-changes" #"communication-evolution","moon-landing"
 
         self._http: Optional[aiohttp.ClientSession] = None
         self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
