@@ -7,6 +7,8 @@ import contextlib
 
 import aiohttp
 
+from config.settings import settings
+
 class BackendClient:
     """
     - Auth: POST {BASE}/api/token/ -> {'access','refresh'}
@@ -15,11 +17,11 @@ class BackendClient:
     - Receive: 'llm_response', 'emotion', etc.
     """
 
-    def __init__(self, base_http: str, ws_path: str, source: str = "qtrobot"):
-        self.base_http = base_http.rstrip("/")
-        self.ws_path = ws_path if ws_path.startswith("/") else "/" + ws_path
-        self.source = source
-        self.chat_topic = None #"education-changes" #"communication-evolution","moon-landing"
+    def __init__(self, base_http: str = None, ws_path: str = None, source: str = None):
+        self.base_http = (base_http or settings.BASE_HTTP_URL).rstrip("/")
+        self.ws_path = ws_path or settings.WS_PATH
+        self.ws_path = self.ws_path if self.ws_path.startswith("/") else "/" + self.ws_path
+        self.source = source or settings.SOURCE
 
         self._http: Optional[aiohttp.ClientSession] = None
         self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
@@ -58,8 +60,8 @@ class BackendClient:
         assert self._http
         url = f"{self.base_http}/api/token/"
         # Expect USERNAME/PASSWORD in environment
-        username = "buddy_user"
-        password = "1"
+        username = settings.USERNAME
+        password = settings.PASSWORD
 
         if not username or not password:
             raise RuntimeError("USERNAME and PASSWORD must be set in environment")
@@ -79,8 +81,6 @@ class BackendClient:
         scheme = "wss" if self.base_http.startswith("https") else "ws"
         
         params = {"token": self.access, "source": self.source}
-        if self.chat_topic:                       # ← add topic if provided
-            params["chat_topic"] = self.chat_topic
             
         qs = urlencode(params)
         self.ws_url = f"{scheme}://{self.base_http.split('://',1)[1]}{self.ws_path}?{qs}"
@@ -142,10 +142,13 @@ class BackendClient:
     # ---------------------------
     # Public API (async)
     # ---------------------------
-    async def send_transcription_and_wait(self, text: str, timeout: float = 20.0, get_emotion: bool = False) -> Tuple[str, Optional[str]]:
+    async def send_transcription_and_wait(self, text: str, timeout: float = None) -> Tuple[str, Optional[str]]:
         """Send a transcription and wait for the next llm_response.
         Returns: (llm_text, emotion)
         """
+        if timeout is None:
+            timeout = settings.DEFAULT_TIMEOUT
+            
         if not text.strip():
             return "", [], None
             
@@ -154,10 +157,8 @@ class BackendClient:
             # It is similar to Promise in Javascript
             self._pending_future = asyncio.get_running_loop().create_future()
         
-        if get_emotion:
-            payload = {"type": "transcription", "data": text}
-        else:
-            payload = {"type": "transcription", "data": text}
+
+        payload = {"type": "transcription", "data": text}
 
         assert self._ws
         await self._ws.send_str(json.dumps(payload))
@@ -177,9 +178,9 @@ class BackendBridge:
 
     def __init__(self):
         # currently hardcoded, should move to an env or config file
-        base = "https://cognibot.org"
-        ws_path = "/ws/chat/"
-        source = "qtrobot"
+        base = settings.BASE_HTTP_URL
+        ws_path = settings.WS_PATH
+        source = settings.SOURCE
         if not base:
             raise RuntimeError("BASE must be set in .env or environment")
         self._client = BackendClient(base, ws_path, source)
@@ -203,11 +204,14 @@ class BackendBridge:
             pass
         self._loop.call_soon_threadsafe(self._loop.stop)
 
-    def send_transcript_and_wait(self, text: str, timeout: float = 20.0, get_emotion: bool = False) -> Tuple[str, Optional[str]]:
+    def send_transcript_and_wait(self, text: str, timeout: float = None) -> Tuple[str, Optional[str]]:
+        if timeout is None:
+            timeout = settings.DEFAULT_TIMEOUT
+            
         if not self._started.is_set():
             raise RuntimeError("BackendBridge not started. Call start() first.")
         fut = asyncio.run_coroutine_threadsafe(
-            self._client.send_transcription_and_wait(text, timeout, get_emotion),
+            self._client.send_transcription_and_wait(text, timeout),
             self._loop,
         )
         return fut.result()
