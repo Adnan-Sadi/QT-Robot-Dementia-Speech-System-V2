@@ -19,7 +19,7 @@ class BackendClient:
         self.base_http = base_http.rstrip("/")
         self.ws_path = ws_path if ws_path.startswith("/") else "/" + ws_path
         self.source = source
-        self.chat_topic =  "education-changes" #"communication-evolution","moon-landing"
+        self.chat_topic = None #"education-changes" #"communication-evolution","moon-landing"
 
         self._http: Optional[aiohttp.ClientSession] = None
         self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
@@ -155,7 +155,7 @@ class BackendClient:
             self._pending_future = asyncio.get_running_loop().create_future()
         
         if get_emotion:
-            payload = {"type": "transcription_with_emotion", "data": text}
+            payload = {"type": "transcription", "data": text}
         else:
             payload = {"type": "transcription", "data": text}
 

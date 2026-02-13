@@ -4,6 +4,7 @@ import queue
 import time
 import rospy
 import sys
+import traceback
 
 from google.cloud import speech
 
@@ -130,7 +131,7 @@ class QTrobotGoogleSpeech():
         #emotion_stop_service = self.emotion_stop_client
         #emo_req = srv.emotion_showRequest()
         
-        get_emotion = True
+        get_emotion = False
         if transcript:
             try:
                 #emo_req.name = EMOTION_THINKING
@@ -163,7 +164,8 @@ class QTrobotGoogleSpeech():
                 print("----------------------")
             
             except Exception as e:
-                print(f"[ERROR] Cognibot failed to respond: {e}")
+                print(f"[ERROR] Cognibot failed to respond: {repr(e)}")
+                traceback.print_exc()
         self.callback_recognize(speech_recognizeRequest())
 
         return speech_recognizeResponse(transcript)

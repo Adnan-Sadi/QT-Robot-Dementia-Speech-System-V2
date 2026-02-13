@@ -54,7 +54,7 @@ def gesture_for_mood(mood: str) -> str:
     "surprised":'QT/surprise', 
     "angry": 'QT/angry', 
     "scared":'QT/peekaboo', 
-    "neutral": random.choices(['QT/neutral', 'QT/show_left', 'QT/show_right'])[0],
+    "neutral": random.choices(['QT/neutral', 'QT/show_left', 'QT/show_right','QT/point_front', 'QT/swipe_left', 'QT/swipe_right'])[0],
     }
     
     return mapping.get(mood, 'QT/neutral')
@@ -144,7 +144,7 @@ def configure_speech_speed(speed: int):
     
     req = speech_configRequest()
     req.language = "" # Keep the default language
-    req.pitch = 0     # Keep the default pitch
+    req.pitch = 0    # Keep the default pitch
     req.speed = speed
     
     try:
