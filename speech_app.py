@@ -105,23 +105,34 @@ class QTrobotGoogleSpeech():
                 # --- Timing Point: Start LLM call ---
                 llm_start_time = time.perf_counter()
                 
-
-                reply = self.backend.send_transcript_and_wait(transcript, timeout=settings.LLM_TIMEOUT)
+                # Get response from backend cna now return up to 4 values
+                response_text, response_emotion, current_scenario, next_scenario = self.backend.send_transcript_and_wait(
+                    transcript, 
+                    emotion=None,  # should be kept None for now. But We could pass detected emotion if we wanted to send it to the backend.
+                    timeout=settings.LLM_TIMEOUT
+                )
                 
                 # --- Timing Point: End LLM call ---
                 llm_end_time = time.perf_counter()
-                #emotion = classify_emotion(reply) # new for emotion and gesture
-                print(f"Cognibot: {reply}")
+                
+                print(f"Cognibot: {response_text}")
+                print(f"Emotion: {response_emotion}")
+                if current_scenario:
+                    print(f"Current Scenario: {current_scenario}")
+                if next_scenario:
+                    print(f"Next Scenario: {next_scenario}")
                 print(f"Response Time: {llm_end_time-llm_start_time:.3f}s")
-                    
-                # for now keeping the neutral emotion, need to update it in future
-                say_text_with_service(reply, "neutral")
+                
+                # Use the emotion from backend if available, otherwise default to neutral
+                emotion_to_show = response_emotion.lower() if response_emotion else "neutral"
+                say_text_with_service(response_text, emotion_to_show)
                 
                 print("----------------------")
             
             except Exception as e:
                 print(f"[ERROR] Cognibot failed to respond: {repr(e)}")
                 traceback.print_exc()
+        
         self.callback_recognize(speech_recognizeRequest())
 
         return speech_recognizeResponse(transcript)
