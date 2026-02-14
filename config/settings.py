@@ -1,15 +1,15 @@
 import os
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 
 class Settings:
     # Backend Configuration
     BASE_HTTP_URL = os.getenv("BASE_HTTP_URL", "https://cognibot.org")
     WS_PATH = os.getenv("WS_PATH", "/ws/chat/")
     SOURCE = os.getenv("SOURCE", "qtrobot")
-    USERNAME = os.getenv("USERNAME", "buddy_user")
-    PASSWORD = os.getenv("PASSWORD", "1")
+    USERNAME = os.getenv("USERNAME")
+    PASSWORD = os.getenv("PASSWORD")
     
     # Audio Configuration
     AUDIO_RATE = int(os.getenv("AUDIO_RATE", "16000"))

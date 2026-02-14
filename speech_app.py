@@ -1,4 +1,3 @@
-/adnansadi/GitHub/QT-Robot-Dementia-Speech-System/speech_app.py
 #!/usr/bin/env python3
 import os
 import queue
@@ -26,6 +25,13 @@ try:
     from services.backend_client import BackendBridge
     from services.audio_stream import MicrophoneStream
     from config.settings import settings
+    
+    # for debugging
+    #rospy.logwarn(f"CWD: {os.getcwd()}")
+    #rospy.logwarn(f"ENV USERNAME raw: {repr(os.getenv('USERNAME'))}")
+    #rospy.logwarn(f"settings.USERNAME: {repr(settings.USERNAME)}")
+    #rospy.logwarn(f"settings.PASSWORD: {repr(settings.PASSWORD)}")
+    #rospy.logwarn(f"settings.BASE_HTTP_URL: {repr(settings.BASE_HTTP_URL)}")
 
 except ImportError as e:
     print(f"Error importing from module: {e}")
