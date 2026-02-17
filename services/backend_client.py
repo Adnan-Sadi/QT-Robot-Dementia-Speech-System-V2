@@ -2,10 +2,12 @@ import json
 import asyncio
 import threading
 from urllib.parse import urlencode
-from typing import Optional, Tuple
+from typing import Optional, Tuple, Dict, Any
 import contextlib
 
 import aiohttp
+
+from config.settings import settings
 
 class BackendClient:
     """
@@ -15,10 +17,11 @@ class BackendClient:
     - Receive: 'llm_response', 'emotion', etc.
     """
 
-    def __init__(self, base_http: str, ws_path: str, source: str = "qtrobot"):
-        self.base_http = base_http.rstrip("/")
-        self.ws_path = ws_path if ws_path.startswith("/") else "/" + ws_path
-        self.source = source
+    def __init__(self, base_http: str = None, ws_path: str = None, source: str = None):
+        self.base_http = (base_http or settings.BASE_HTTP_URL).rstrip("/")
+        self.ws_path = ws_path or settings.WS_PATH
+        self.ws_path = self.ws_path if self.ws_path.startswith("/") else "/" + self.ws_path
+        self.source = source or settings.SOURCE
 
         self._http: Optional[aiohttp.ClientSession] = None
         self._ws: Optional[aiohttp.ClientWebSocketResponse] = None
@@ -57,8 +60,8 @@ class BackendClient:
         assert self._http
         url = f"{self.base_http}/api/token/"
         # Expect USERNAME/PASSWORD in environment
-        username = "buddy_user"
-        password = "1"
+        username = settings.USERNAME
+        password = settings.PASSWORD
 
         if not username or not password:
             raise RuntimeError("USERNAME and PASSWORD must be set in environment")
@@ -76,7 +79,10 @@ class BackendClient:
             raise RuntimeError(f"Missing 'access' in token response: {data}")
         # prepare the websocket url
         scheme = "wss" if self.base_http.startswith("https") else "ws"
-        qs = urlencode({"token": self.access, "source": self.source})
+        
+        params = {"token": self.access, "source": self.source}
+            
+        qs = urlencode(params)
         self.ws_url = f"{scheme}://{self.base_http.split('://',1)[1]}{self.ws_path}?{qs}"
 
     async def _connect_ws(self):
@@ -98,26 +104,31 @@ class BackendClient:
                     data = json.loads(msg.data)
                 except json.JSONDecodeError:
                     continue
-               
+            
                 mtype = data.get("type")
                 if mtype == "llm_response":
-                    # Resolve pending future with (text, emotion)
                     async with self._lock:
-                        text = data.get("data")
-                        if data.get("emotion") is not None:
-                            emotion = data.get("emotion")
+                        payload = data.get("data")
+                        emotion = data.get("emotion")
                         
-                            if self._pending_future and not self._pending_future.done():
-                                # resolves the pending future with the received response
-                                # This unblocks the await that was waiting for it.
-                                self._pending_future.set_result((text, emotion))
+                        # Handle both string (ChatConsumer) and dict (ActivityChatConsumer)
+                        if isinstance(payload, str):
+                            text = payload
+                            current_scenario = None
+                            next_scenario = None
+                        elif isinstance(payload, dict):
+                            text = payload.get("text", "")
+                            current_scenario = payload.get("current_scenario")
+                            next_scenario = payload.get("next_scenario")
                         else:
-                            if self._pending_future and not self._pending_future.done():
-                                self._pending_future.set_result((text))
-
+                            # Skip if payload is neither string nor dict
+                            continue
+                        
+                        if self._pending_future and not self._pending_future.done():
+                            # Return tuple: (text, emotion, current_scenario, next_scenario)
+                            self._pending_future.set_result((text, emotion, current_scenario, next_scenario))
 
             elif msg.type in (aiohttp.WSMsgType.CLOSED, aiohttp.WSMsgType.CLOSE):
-                # Try to reconnect with backoff
                 await self._reconnect_with_backoff()
             elif msg.type == aiohttp.WSMsgType.ERROR:
                 await self._reconnect_with_backoff()
@@ -136,32 +147,49 @@ class BackendClient:
     # ---------------------------
     # Public API (async)
     # ---------------------------
-    async def send_transcription_and_wait(self, text: str, timeout: float = 20.0, get_emotion: bool = False) -> Tuple[str, Optional[str]]:
-        """Send a transcription and wait for the next llm_response.
-        Returns: (llm_text, emotion)
+    async def send_transcription_and_wait(
+        self, 
+        text: str, 
+        emotion: Optional[str] = None,
+        timeout: float = None
+    ) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
+        """Send a transcription (with optional emotion) and wait for the next llm_response.
+        
+        Args:
+            text: The transcription text
+            emotion: Optional emotion to send with transcription
+            timeout: Response timeout in seconds
+            
+        Returns:
+            Tuple of (llm_text, emotion, current_scenario, next_scenario)
+            - For ChatConsumer: (text, emotion, None, None)
+            - For ActivityChatConsumer: (text, emotion, scenario_name, next_scenario_name)
         """
+        if timeout is None:
+            timeout = settings.DEFAULT_TIMEOUT
+            
         if not text.strip():
-            return "", [], None
+            return "", None, None, None
             
         async with self._lock:
-            # It represents a single result that will be available in the future - either a value or an exception.
-            # It is similar to Promise in Javascript
             self._pending_future = asyncio.get_running_loop().create_future()
         
-        if get_emotion:
-            payload = {"type": "transcription_with_emotion", "data": text}
+        # Build payload with optional emotion
+        payload: Dict[str, Any] = {"type": "transcription", "data": text}
+        if emotion is not None:
+            payload["emotion"] = emotion
+            print(f"Sending transcription with emotion: {emotion}")
         else:
-            payload = {"type": "transcription", "data": text}
+            print("emotion not prvovided, sending transcription without emotion")
 
         assert self._ws
         await self._ws.send_str(json.dumps(payload))
+        
         try:
             return await asyncio.wait_for(self._pending_future, timeout=timeout)
         finally:
             async with self._lock:
-                # resets pending future to None after completion
                 self._pending_future = None
-
 
 class BackendBridge:
     """
@@ -171,9 +199,9 @@ class BackendBridge:
 
     def __init__(self):
         # currently hardcoded, should move to an env or config file
-        base = "https://cognibot.org"
-        ws_path = "/ws/chat/"
-        source = "qtrobot"
+        base = settings.BASE_HTTP_URL
+        ws_path = settings.WS_PATH
+        source = settings.SOURCE
         if not base:
             raise RuntimeError("BASE must be set in .env or environment")
         self._client = BackendClient(base, ws_path, source)
@@ -197,11 +225,25 @@ class BackendBridge:
             pass
         self._loop.call_soon_threadsafe(self._loop.stop)
 
-    def send_transcript_and_wait(self, text: str, timeout: float = 20.0, get_emotion: bool = False) -> Tuple[str, Optional[str]]:
+    def send_transcript_and_wait(
+        self, 
+        text: str, 
+        emotion: Optional[str] = None,
+        timeout: float = None
+    ) -> Tuple[str, Optional[str], Optional[str], Optional[str]]:
+        """Send transcription with optional emotion and wait for response.
+        
+        Returns:
+            Tuple of (llm_text, emotion, current_scenario, next_scenario)
+        """
+        if timeout is None:
+            timeout = settings.DEFAULT_TIMEOUT
+            
         if not self._started.is_set():
             raise RuntimeError("BackendBridge not started. Call start() first.")
+        
         fut = asyncio.run_coroutine_threadsafe(
-            self._client.send_transcription_and_wait(text, timeout, get_emotion),
+            self._client.send_transcription_and_wait(text, emotion, timeout),
             self._loop,
         )
         return fut.result()

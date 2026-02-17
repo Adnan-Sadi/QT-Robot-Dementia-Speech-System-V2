@@ -54,7 +54,7 @@ def gesture_for_mood(mood: str) -> str:
     "surprised":'QT/surprise', 
     "angry": 'QT/angry', 
     "scared":'QT/peekaboo', 
-    "neutral": random.choices(['QT/neutral', 'QT/show_left', 'QT/show_right'])[0],
+    "neutral": random.choices(['QT/neutral', 'QT/show_left', 'QT/show_right','QT/point_front', 'QT/swipe_left', 'QT/swipe_right'])[0],
     }
     
     return mapping.get(mood, 'QT/neutral')
@@ -107,13 +107,13 @@ def say_text_with_service(text: str, emotion: str):
     req.message = text
     
     gesture_name = gesture_for_mood(emotion)
-    emotion_name = f"QT/{emotion}"
+    # emotion_name = f"QT/{emotion}"
     
     if gesture_name:
         threading.Thread(target=_play_gesture_async, args=(gesture_name,), daemon=True).start()
         
-    if emotion_name:
-        threading.Thread(target=_play_emotion_async, args=(emotion_name,), daemon=True).start()
+    # if emotion_name:
+        # threading.Thread(target=_play_emotion_async, args=(emotion_name,), daemon=True).start()
 
     try:
         rospy.loginfo(f"Calling speech service with message: '{text}'")
@@ -144,7 +144,7 @@ def configure_speech_speed(speed: int):
     
     req = speech_configRequest()
     req.language = "" # Keep the default language
-    req.pitch = 0     # Keep the default pitch
+    req.pitch = 0    # Keep the default pitch
     req.speed = speed
     
     try:
@@ -158,19 +158,4 @@ def configure_speech_speed(speed: int):
     
     except rospy.ServiceException as e:
         rospy.logerr(f"Speech config service call failed: {e}")
-
-
-if __name__ == '__main__':
-    initialize_ros_node()
-
-    # Set the speaking speed to a faster rate (e.g., 150%)
-    configure_speech_speed(110)
-    
-    say_text_with_service("Hello. I am speaking at a faster speed now.")
-    
-    # You can set it back to normal speed later if needed
-    # configure_speech_speed(100)
-    # say_text_with_service("Now I am speaking at a normal speed again.")
-    
-    rospy.spin()
 

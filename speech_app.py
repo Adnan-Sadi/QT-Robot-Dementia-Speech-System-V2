@@ -4,6 +4,7 @@ import queue
 import time
 import rospy
 import sys
+import traceback
 
 from google.cloud import speech
 
@@ -11,6 +12,7 @@ from qt_gesture_controller.srv import * # for gesture
 from qt_robot_interface.srv import emotion_show, emotion_showRequest # for emotion
 from qt_robot_interface import srv
 import threading #new
+import random
 
 try:
     script_dir = os.path.dirname(os.path.abspath(__file__))
@@ -20,7 +22,16 @@ try:
 
     from src.speakout import initialize_ros_node, say_text_with_service, configure_speech_speed, _play_gesture_async
     # from src.vader_emotion import classify_emotion, zero_shot_classifier # new for emotion and gesture
-    from src.backend_ws_client import BackendBridge
+    from services.backend_client import BackendBridge
+    from services.audio_stream import MicrophoneStream
+    from config.settings import settings
+    
+    # for debugging
+    #rospy.logwarn(f"CWD: {os.getcwd()}")
+    #rospy.logwarn(f"ENV USERNAME raw: {repr(os.getenv('USERNAME'))}")
+    #rospy.logwarn(f"settings.USERNAME: {repr(settings.USERNAME)}")
+    #rospy.logwarn(f"settings.PASSWORD: {repr(settings.PASSWORD)}")
+    #rospy.logwarn(f"settings.BASE_HTTP_URL: {repr(settings.BASE_HTTP_URL)}")
 
 except ImportError as e:
     print(f"Error importing from module: {e}")
@@ -31,63 +42,36 @@ from audio_common_msgs.msg import AudioData
 from qt_gspeech_app.srv import *
 
 
-class MicrophoneStream(object):
-
-    def __init__(self, buffer):
-        self.stream_buff = buffer
-        self.closed = True
-
-    def __enter__(self):
-        self.closed = False
-        return self
-
-    def __exit__(self, type, value, traceback):
-        self.closed = True
-        self.stream_buff.put(None)
-
-    def generator(self):
-        while not self.closed:
-            # Use a blocking get() to ensure there's at least one chunk of
-            # data, and stop iteration if the chunk is None, indicating the
-            # end of the audio stream.
-            chunk = self.stream_buff.get()
-            if chunk is None:
-                return
-            data = [chunk]
-            # Now consume whatever other data's still buffered.
-            while True:
-                try:
-                    chunk = self.stream_buff.get(block=False)
-                    if chunk is None:
-                        return
-                    data.append(chunk)
-                except queue.Empty:
-                    break
-
-            yield b"".join(data)
-
-
-
 class QTrobotGoogleSpeech():
     """QTrobot speech recognition using google cloud service"""
 
     def __init__(self):
         self.listening_enabled = True # Keep this flag
         self.aqueue = queue.Queue(maxsize=2000) # more than one minute         
-        self.audio_rate = rospy.get_param("/dss_backend_connected/audio_rate", 16000)
-        self.language = rospy.get_param("/dss_backend_connected/default_language", 'en-US')
-        self.model = rospy.get_param("/dss_backend_connected/model", 'default')
-        self.use_enhanced_model = rospy.get_param("/dss_backend_connected/use_enhanced_model", True)
+        self.audio_rate = rospy.get_param("/dss_backend_connected/audio_rate", settings.AUDIO_RATE)
+        self.language = rospy.get_param("/dss_backend_connected/default_language", settings.DEFAULT_LANGUAGE)
+        self.model = rospy.get_param("/dss_backend_connected/model", settings.SPEECH_MODEL)
+        self.use_enhanced_model = rospy.get_param("/dss_backend_connected/use_enhanced_model", settings.USE_ENHANCED_MODEL)
    
         
         print(f"audio rate:{self.audio_rate}, default language:{self.language}, model:{self.model}, use_enhanced_model:{self.use_enhanced_model}")
 
         # start recognize service
-        self.speech_recognize = rospy.Service('/qt_robot/speech/recognize', speech_recognize, self.callback_recognize)        
+        self.speech_recognize_service = rospy.Service('/qt_robot/speech/recognize', speech_recognize, self.callback_recognize) # RENAMED LOCAL VAR
         rospy.Subscriber('/qt_respeaker_app/channel0', AudioData, self.callback_audio_stream)
         
         self.backend = BackendBridge()
         self.backend.start()
+
+        # Service client for calling /qt_robot/speech/recognize
+        rospy.wait_for_service('/qt_robot/speech/recognize')
+        self.speech_recognize_client = rospy.ServiceProxy('/qt_robot/speech/recognize', speech_recognize)
+        
+        # Service for emotion (for thinking face)
+        self.emotion_show_service = rospy.ServiceProxy('/qt_robot/emotion/show', srv.emotion_show)
+        rospy.wait_for_service('/qt_robot/emotion/stop')
+        self.emotion_stop_client = rospy.ServiceProxy('/qt_robot/emotion/stop', srv.emotion_stop)
+        
 
 
     def callback_audio_stream(self, msg): 
@@ -113,40 +97,48 @@ class QTrobotGoogleSpeech():
         # Manually clear the queue before recognizing
         self.aqueue.queue.clear()
         transcript = self.recognize_gspeech(timeout, options, language, True)
-        get_emotion = True
+        
+        # Set-up variables for the "thinking" emotion
+        #EMOTION_THINKING = "QT/confused"
+        #emotion_stop_service = self.emotion_stop_client
+        #emo_req = srv.emotion_showRequest()
+        
         if transcript:
             try:
+                #emo_req.name = EMOTION_THINKING
+                #self.emotion_show_service(emo_req)
+                
                 # --- Timing Point: Start LLM call ---
                 llm_start_time = time.perf_counter()
                 
-                #backend returns both resposne and the emotion
-                if get_emotion:
-                    reply, emotion = self.backend.send_transcript_and_wait(transcript, timeout=25.0, get_emotion=get_emotion)
-                else:
-                    reply = self.backend.send_transcript_and_wait(transcript, timeout=25.0)
+                # Get response from backend cna now return up to 4 values
+                response_text, response_emotion, current_scenario, next_scenario = self.backend.send_transcript_and_wait(
+                    transcript, 
+                    emotion=None,  # should be kept None for now. But We could pass detected emotion if we wanted to send it to the backend.
+                    timeout=settings.LLM_TIMEOUT
+                )
                 
                 # --- Timing Point: End LLM call ---
                 llm_end_time = time.perf_counter()
-                #emotion = classify_emotion(reply) # new for emotion and gesture
-                print(f"🤖 Cognibot: {reply}")
-                if get_emotion:
-                    print(f"Emotion: {emotion}")
+                
+                print(f"Cognibot: {response_text}")
+                print(f"Emotion: {response_emotion}")
+                if current_scenario:
+                    print(f"Current Scenario: {current_scenario}")
+                if next_scenario:
+                    print(f"Next Scenario: {next_scenario}")
                 print(f"Response Time: {llm_end_time-llm_start_time:.3f}s")
-                    
-                # --- Timing Point: Start ROS TTS call ---
-                tts_start_time = time.time()
-                if get_emotion:
-                    say_text_with_service(reply, emotion.lower())
-                else: 
-                    say_text_with_service(reply, "neutral")
-                # --- Timing Point: End ROS TTS call (Robot finished speaking) ---
-                tts_end_time = time.time()
-
-
+                
+                # Use the emotion from backend if available, otherwise default to neutral
+                emotion_to_show = response_emotion.lower() if response_emotion else "neutral"
+                say_text_with_service(response_text, emotion_to_show)
+                
                 print("----------------------")
             
             except Exception as e:
-                print(f"[ERROR] Cognibot failed to respond: {e}")
+                print(f"[ERROR] Cognibot failed to respond: {repr(e)}")
+                traceback.print_exc()
+        
         self.callback_recognize(speech_recognizeRequest())
 
         return speech_recognizeResponse(transcript)
@@ -202,11 +194,13 @@ class QTrobotGoogleSpeech():
                 language_code= str(language.strip()),
                 enable_automatic_punctuation=True,
             )
+
         streaming_config = speech.StreamingRecognitionConfig(
             config=config,
-            interim_results=False,
+            interim_results=True,
             enable_voice_activity_events=True, 
             )
+
         with MicrophoneStream(self.aqueue) as mic:
             start_time = time.time()
             audio_generator = mic.generator()
@@ -224,7 +218,6 @@ class QTrobotGoogleSpeech():
                 output = ""
                 print("exception")     
 
-        print("Detected [%s]" % (output))
         return output
 
 
@@ -233,41 +226,97 @@ class QTrobotGoogleSpeech():
     """
     def validate_response(self, responses, context, start_time, timeout):
         transcript = ""
+        listening_emotion_played = False
+        listening_emotion_list = settings.EMOTION_LISTENING
+        EMOTION_LISTENING = random.choices(listening_emotion_list)[0] # Example: A simple blink or nod to show attention
+        
+        # Get the emotion service proxy (assuming it's available or set up here/globally)
+        emotion_show_service = rospy.ServiceProxy('/qt_robot/emotion/show', srv.emotion_show)
+        emo_req = srv.emotion_showRequest()
+
         for response in responses:
-            print(response)
+            # Check for the end of the stream or empty results
             if not response.results:
                 continue
+                
             result = response.results[0]
             if not result.alternatives:
                 continue
+                
             transcript = result.alternatives[0].transcript
-            print(f"Transcript: {transcript}")
-            if not result.is_final:
-                if context:
-                    for option in context:
-                        if option == transcript.lower().strip():
-                            return transcript
-            else:
+            
+            # --- NEW: Immediate Feedback Emotion Logic ---
+            if not result.is_final and not listening_emotion_played and transcript.strip():
+                # First time we see a non-empty, non-final transcript, play the listening emotion
+                emo_req.name = EMOTION_LISTENING
+                emotion_show_service(emo_req)
+                print(f"Robot started listening emotion: {EMOTION_LISTENING}")
+                listening_emotion_played = True
+                
+            # If we get a FINAL result, break and return it
+            if result.is_final:
+                 print(f"Transcript: {transcript}")
                  return transcript
+                 
+            # If context is provided (for command/option matching), check against interim results
+            if context:
+                for option in context:
+                    if option == transcript.lower().strip():
+                        print(f"Transcript: {transcript}")
+                        return transcript
+                        
+        print(f"Transcript: {transcript}")
         return transcript
-    
-if __name__ == "__main__":
-    initialize_ros_node()
-    #rospy.init_node('qt_gspeech_app')  
-    configure_speech_speed(110)
-    
-    gspeech = QTrobotGoogleSpeech() 
+        
+     
+
+def do_startup_movement():
+    # ... (gesture and emotion setup, same as before) ...
     rospy.wait_for_service('/qt_robot/gesture/play')
     gesture_play_service = rospy.ServiceProxy('/qt_robot/gesture/play', gesture_play) 
     threading.Thread(target=_play_gesture_async, args=("QT/happy",), daemon=True).start()
     
-    rospy.wait_for_service('/qt_robot/emotion/show') # New for emotion
-    emotion_show_service = rospy.ServiceProxy('/qt_robot/emotion/show', srv.emotion_show) # New for emotion
+    rospy.wait_for_service('/qt_robot/emotion/show') 
+    emotion_show_service = rospy.ServiceProxy('/qt_robot/emotion/show', srv.emotion_show)
     emo_req = srv.emotion_showRequest()
-    emo_req.name = f"QT/yawn" # New for emotion
+    emo_req.name = f"QT/yawn"
     emotion_show_service(emo_req)
+    
+        
+    
+if __name__ == "__main__":
+    initialize_ros_node()
+    configure_speech_speed(settings.SPEECH_SPEED)
+    
+    gspeech = QTrobotGoogleSpeech()
+    
+    do_startup_movement() 
+    
+    # Start the recognize service call in a new thread 
+    
+    def start_recognition_loop():
+        """Function to be run in a separate thread to start the blocking service call."""
+        rospy.loginfo("Starting QT Speech Recognition loop in a background thread...")
+        req = speech_recognizeRequest() 
+        try:
+            # This call will block until ROS is shut down or an error occurs.
+            gspeech.speech_recognize_client(req)
+        except rospy.ServiceException as e:
+            # Expect a ServiceException upon Ctrl+C/ROS shutdown.
+            rospy.loginfo(f"Speech recognition service client terminated: {e}")
+        except Exception as e:
+            rospy.logerr(f"Unexpected error in recognition thread: {e}")
+
+    # Start the thread with daemon=True so it doesn't prevent the main app from exiting
+    # once the main thread (rospy.spin()) is terminated.
+    threading.Thread(target=start_recognition_loop, daemon=True).start()
+    
+    # ------------------------------------------------------------------
              
-    rospy.loginfo("QT Speech App is Ready!")
+    rospy.loginfo("QT Speech App is Ready! Press Ctrl+C to shut down.")
     rospy.on_shutdown(lambda: gspeech.backend.stop())
-    rospy.spin()
+    
+    # The main thread now runs rospy.spin(), which can handle the Ctrl+C signal.
+    rospy.spin() 
+    
     rospy.loginfo("QT Speech App Shutdown")
