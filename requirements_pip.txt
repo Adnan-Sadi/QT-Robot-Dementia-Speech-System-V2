@@ -1,17 +1,24 @@
+# Python (pip) packages — only what the codebase directly uses
+# Install with: pip install -r requirements_pip.txt
+# Versions pinned to match the currently installed environment.
+
 # ── UI ──────────────────────────────────────────────────────────────────
-customtkinter==5.2.2       
+customtkinter==5.2.2          # app/ui/app.py, transcript_panel.py, activity_grid.py, status_bar.py
 
 # ── Configuration ────────────────────────────────────────────────────────
-python-dotenv==1.0.1      
+python-dotenv==1.0.1          # config/settings.py
 
 # ── Speech-to-Text (Google Cloud) ────────────────────────────────────────
-google-cloud-speech==2.33.0 
+google-cloud-speech==2.33.0   # speech_app.py
 
 # ── Backend WebSocket client ──────────────────────────────────────────────
-aiohttp==3.8.4            
+aiohttp==3.8.4                # services/backend_client.py
 
 # ── Emotion analysis ─────────────────────────────────────────────────────
-vaderSentiment==3.3.2    
+vaderSentiment==3.3.2         # vader_emotion.py
+
+# ── ROS runtime dependency (required by rospy → genpy → yaml) ────────────
+PyYAML==5.3.1
 
 # ── Transitive dependencies (pinned to match installed environment) ───────
 
@@ -44,3 +51,4 @@ urllib3==1.25.8
 # stdlib backports / typing helpers (used transitively)
 exceptiongroup==1.2.0
 typing-extensions==4.9.0
+rospkg==1.6.0
