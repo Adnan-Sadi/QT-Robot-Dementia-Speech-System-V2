@@ -10,6 +10,9 @@ class Settings:
     SOURCE = os.getenv("SOURCE", "qtrobot")
     USERNAME = os.getenv("USERNAME")
     PASSWORD = os.getenv("PASSWORD")
+
+    # STT Configuration
+    STT_ENGINE = os.getenv("STT_ENGINE", "gspeech").lower()
     
     # Audio Configuration
     AUDIO_RATE = int(os.getenv("AUDIO_RATE", "16000"))
