@@ -63,7 +63,7 @@ if __name__ == "__main__":
     def start_recognition_loop():
         rospy.loginfo("Starting QT Speech Recognition loop in a background thread...")
         req = speech_recognizeRequest()
-        req.timeout = settings.DEFAULT_TIMEOUT
+        req.timeout = int(settings.DEFAULT_TIMEOUT)
         req.language = settings.DEFAULT_LANGUAGE
 
         while not rospy.is_shutdown():
