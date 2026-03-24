@@ -11,11 +11,11 @@ import threading #new
 
 try:
     script_dir = os.path.dirname(os.path.abspath(__file__))
-    module_dir = os.path.join(script_dir, '/home/qtrobot/catkin_ws/src/dss_backend_connected')
+    module_dir = os.path.join(script_dir)
     if module_dir not in sys.path:
         sys.path.append(module_dir)
 
-    from src.speakout import initialize_ros_node, configure_speech_speed, _play_gesture_async
+    from speakout import initialize_ros_node, configure_speech_speed, _play_gesture_async
     # from src.vader_emotion import classify_emotion, zero_shot_classifier # new for emotion and gesture
     from services.qt_speech import QTrobotSpeech
     from config.settings import settings

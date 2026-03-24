@@ -7,7 +7,7 @@ from qt_robot_interface import srv
 
 from services.backend_client import BackendBridge
 from services.gspeech_recognizer import GSpeechRecognizer
-from src.speakout import say_text_with_service
+from speakout import say_text_with_service
 from config.settings import settings
 
 
