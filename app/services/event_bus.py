@@ -2,7 +2,7 @@ from dataclasses import dataclass
 from queue import Queue, Empty
 from typing import Literal, Optional
 
-EventType = Literal["log", "stt", "llm", "status"]
+EventType = Literal["log", "stt", "llm", "status", "stt_interim", "stt_final"]
 
 @dataclass
 class Event:

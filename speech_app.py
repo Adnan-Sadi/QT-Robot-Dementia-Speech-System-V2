@@ -59,8 +59,16 @@ if __name__ == "__main__":
 
     do_startup_movement()
 
-    # Start the recognize service call in a new thread
+    # Accumulated transcript text across multiple utterances
+    _accumulated_text = ""
+    _accumulated_lock = threading.Lock()
+
+    # ROS param used as send-trigger from the UI process
+    SEND_PARAM = "/dss/send_requested"
+    rospy.set_param(SEND_PARAM, False)
+
     def start_recognition_loop():
+        global _accumulated_text
         rospy.loginfo("Starting QT Speech Recognition loop in a background thread...")
         req = speech_recognizeRequest()
         req.timeout = int(settings.DEFAULT_TIMEOUT)
@@ -69,8 +77,32 @@ if __name__ == "__main__":
         while not rospy.is_shutdown():
             try:
                 resp = qt_speech.speech_recognize_client(req)
-                transcript = getattr(resp, "transcript", "")
-                qt_speech.process_transcript(transcript)
+                transcript = getattr(resp, "transcript", "").strip()
+
+                if transcript:
+                    with _accumulated_lock:
+                        if _accumulated_text:
+                            _accumulated_text += " " + transcript
+                        else:
+                            _accumulated_text = transcript
+                        current = _accumulated_text
+
+                    # Print interim update so the UI can display it live
+                    print(f"STT_INTERIM: {current}", flush=True)
+
+                # Check if the UI has requested a send
+                if rospy.get_param(SEND_PARAM, False):
+                    rospy.set_param(SEND_PARAM, False)  # reset immediately
+                    with _accumulated_lock:
+                        to_send = _accumulated_text.strip()
+                        _accumulated_text = ""
+
+                    if to_send:
+                        print(f"STT_FINAL: {to_send}", flush=True)
+                        qt_speech.process_transcript(to_send)
+                    else:
+                        rospy.logwarn("Send requested but no accumulated transcript.")
+
             except rospy.ServiceException as e:
                 if rospy.is_shutdown():
                     break
